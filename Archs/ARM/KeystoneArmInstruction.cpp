@@ -12,6 +12,7 @@
 #include <array>
 #include <keystone/keystone.h>
 #include <sstream>
+#include <utility>
 
 namespace
 {
@@ -120,6 +121,29 @@ namespace
 		if (!parser.atEnd())
 			parser.eatToken();
 		return result;
+	}
+
+	// Keystone only accepts the ".w" width suffix on Thumb instructions that also
+	// have a 16-bit encoding. BL and BLX (immediate) are 32-bit-only in Thumb, so
+	// the GNU-style spelling "bl.w" -- which disassemblers emit -- is rejected
+	// with KS_ERR_ASM_INVALIDOPERAND. The suffix cannot select another encoding
+	// there, so drop it before Keystone sees the statement.
+	void removeRedundantWideSuffix(ParsedStatement& statement)
+	{
+		static const std::pair<const char*, const char*> replacements[] = {
+			{ "bl.w", "bl" },
+			{ "blx.w", "blx" },
+		};
+
+		for (const auto& replacement : replacements)
+		{
+			if (statement.mnemonic != replacement.first)
+				continue;
+
+			statement.text.replace(0, statement.mnemonic.size(), replacement.second);
+			statement.mnemonic = replacement.second;
+			return;
+		}
 	}
 
 	std::shared_ptr<KeystoneItBlock> activeItBlock;
@@ -326,6 +350,8 @@ std::unique_ptr<CAssemblerCommand> parseKeystoneArmOpcode(
 
 	const Token firstToken = parser.peekToken();
 	ParsedStatement statement = readStatement(parser);
+	if (thumb)
+		removeRedundantWideSuffix(statement);
 	if (statement.hasUnsupportedLabel)
 	{
 		parser.printError(firstToken, "@StaticLabel and @@LocalLabel are not supported by the ARMv7-A backend");

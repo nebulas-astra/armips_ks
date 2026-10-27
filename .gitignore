@@ -12,3 +12,4 @@
 # Visual Studio CMake directories.
 /.vs/
 /out/
+/build/

@@ -1,5 +1,6 @@
 ﻿#include "Main/CommandLineInterface.h"
 #include "Main/Tests.h"
+#include "Util/FileSystem.h"
 #include "Util/Util.h"
 
 #include <clocale>
@@ -16,7 +17,7 @@ namespace
 		if (arguments.size() < 2)
 			return !runTests("Tests", arguments[0]);
 		else
-			return !runTests(arguments[1], arguments[0]);
+			return !runTests(fs::u8path(arguments[1]), arguments[0]);
 #endif
 		return runFromCommandLine(arguments);
 	}

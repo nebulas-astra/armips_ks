@@ -92,7 +92,7 @@ std::vector<fs::path> TestRunner::getTestsList(const fs::path& dir)
 			continue;
 
 		const auto &path = entry.path();
-		fs::path fileName = path / (path.filename().u8string() + ".asm");
+		fs::path fileName = path / fs::u8path(path.filename().u8string() + ".asm");
 
 		if (fs::exists(fileName))
 		{
@@ -139,8 +139,8 @@ bool TestRunner::executeTest(const fs::path& dir, const std::string& testName, s
 	}
 	else
 	{
-		settings.inputFileName = testName + ".asm";
-		settings.tempFileName = testName + ".temp.txt";
+		settings.inputFileName = fs::u8path(testName + ".asm");
+		settings.tempFileName = fs::u8path(testName + ".temp.txt");
 	}
 
 	settings.errorsResult = &errors;

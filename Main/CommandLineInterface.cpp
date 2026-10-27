@@ -44,24 +44,24 @@ static bool parseArguments(const std::vector<std::string>& arguments, ArmipsArgu
 			}
 			else if (arguments[argpos] == "-temp" && argpos + 1 < arguments.size())
 			{
-				settings.tempFileName = arguments[argpos + 1];
+				settings.tempFileName = fs::u8path(arguments[argpos + 1]);
 				argpos += 2;
 			}
 			else if (arguments[argpos] == "-sym" && argpos + 1 < arguments.size())
 			{
-				settings.symFileName = arguments[argpos + 1];
+				settings.symFileName = fs::u8path(arguments[argpos + 1]);
 				settings.symFileVersion = 1;
 				argpos += 2;
 			}
 			else if (arguments[argpos] == "-sym2" && argpos + 1 < arguments.size())
 			{
-				settings.symFileName = arguments[argpos + 1];
+				settings.symFileName = fs::u8path(arguments[argpos + 1]);
 				settings.symFileVersion = 2;
 				argpos += 2;
 			}
 			else if (arguments[argpos] == "-infolog" && argpos + 1 < arguments.size())
 			{
-				settings.infoLogFileName = arguments[argpos + 1];
+				settings.infoLogFileName = fs::u8path(arguments[argpos + 1]);
 				argpos += 2;
 			}
 			else if (arguments[argpos] == "-erroronwarning")
@@ -126,7 +126,7 @@ static bool parseArguments(const std::vector<std::string>& arguments, ArmipsArgu
 			else if (arguments[argpos] == "-root" && argpos + 1 < arguments.size())
 			{
 				std::error_code errorCode;
-				fs::current_path(arguments[argpos + 1], errorCode);
+				fs::current_path(fs::u8path(arguments[argpos + 1]), errorCode);
 
 				if (errorCode)
 				{
@@ -173,7 +173,7 @@ static bool parseArguments(const std::vector<std::string>& arguments, ArmipsArgu
 			// only allow one input filename
 			if (settings.inputFileName.empty())
 			{
-				settings.inputFileName = arguments[argpos];
+				settings.inputFileName = fs::u8path(arguments[argpos]);
 				argpos++;
 			}
 			else {

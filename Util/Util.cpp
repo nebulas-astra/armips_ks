@@ -30,18 +30,38 @@ std::string convertWStringToUtf8(std::wstring_view source)
 	
 	for (size_t i = 0; i < source.size(); i++)
 	{
-		wchar_t character = source[i];
+		char32_t character = source[i];
+
+		// Windows stores characters outside the BMP as UTF-16 surrogate pairs.
+		// Combine them into one code point so the result is valid UTF-8.
+		if (character >= 0xD800 && character <= 0xDBFF && i + 1 < source.size())
+		{
+			const char32_t low = source[i + 1];
+			if (low >= 0xDC00 && low <= 0xDFFF)
+			{
+				character = 0x10000 + ((character - 0xD800) << 10) + (low - 0xDC00);
+				i++;
+			}
+		}
+
 		if (character < 0x80)
 		{
-			result += character & 0x7F;
+			result += static_cast<char>(character & 0x7F);
 		} else if (character < 0x800)
 		{
-			result += 0xC0 | ((character >> 6) & 0x1F);
-			result += (0x80 | (character & 0x3F));
-		} else {
-			result += 0xE0 | ((character >> 12) & 0xF);
-			result += 0x80 | ((character >> 6) & 0x3F);
-			result += 0x80 | (character & 0x3F);
+			result += static_cast<char>(0xC0 | ((character >> 6) & 0x1F));
+			result += static_cast<char>(0x80 | (character & 0x3F));
+		} else if (character < 0x10000)
+		{
+			result += static_cast<char>(0xE0 | ((character >> 12) & 0xF));
+			result += static_cast<char>(0x80 | ((character >> 6) & 0x3F));
+			result += static_cast<char>(0x80 | (character & 0x3F));
+		} else
+		{
+			result += static_cast<char>(0xF0 | ((character >> 18) & 0x7));
+			result += static_cast<char>(0x80 | ((character >> 12) & 0x3F));
+			result += static_cast<char>(0x80 | ((character >> 6) & 0x3F));
+			result += static_cast<char>(0x80 | (character & 0x3F));
 		}
 	}
 
