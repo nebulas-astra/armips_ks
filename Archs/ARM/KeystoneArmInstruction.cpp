@@ -4,6 +4,7 @@
 #ifdef ARMIPS_HAS_KEYSTONE
 
 #include "Core/Common.h"
+#include "Core/ExpressionFunctionHandler.h"
 #include "Core/FileManager.h"
 #include "Core/Misc.h"
 #include "Parser/Parser.h"
@@ -77,9 +78,19 @@ namespace
 	{
 		std::string text;
 		std::string mnemonic;
+		std::vector<KeystoneStatementPart> parts;
 		bool hasLiteralPoolSyntax = false;
 		bool hasUnsupportedLabel = false;
 	};
+
+	std::string tokenText(const Token& token)
+	{
+		if (token.type == TokenType::Identifier)
+			return token.identifierValue().string();
+		if (token.type == TokenType::Integer)
+			return formatKeystoneInteger(token.intValue());
+		return token.getOriginalText();
+	}
 
 	ParsedStatement readStatement(Parser& parser)
 	{
@@ -88,33 +99,84 @@ namespace
 
 		while (!parser.atEnd() && parser.peekToken().type != TokenType::Separator)
 		{
-			const Token token = parser.nextToken();
 			if (!result.text.empty())
 				result.text += ' ';
 
-			if (token.type == TokenType::Identifier)
+			const Token token = parser.peekToken();
+
+			// Expression functions such as org("...") cannot be handled by
+			// Keystone. Parse them with armips' expression parser and evaluate
+			// them on every pass, so they reach Keystone as numeric literals.
+			if (!first && token.type == TokenType::Identifier &&
+				parser.peekToken(1).type == TokenType::LParen &&
+				ExpressionFunctionHandler::instance().find(token.identifierValue()).has_value())
 			{
-				const std::string& identifier = token.identifierValue().string();
+				const TokenizerPosition start = parser.getTokenizer()->getPosition();
+				Expression expression = parser.parseExpression();
+				const TokenizerPosition end = parser.getTokenizer()->getPosition();
+
+				std::string rawText;
+				for (const Token& tokenPart : parser.getTokenizer()->getTokens(start, end))
+				{
+					if (!rawText.empty())
+						rawText += ' ';
+					rawText += tokenText(tokenPart);
+				}
+
+				KeystoneStatementPart part;
+				if (expression.isLoaded())
+				{
+					part.kind = KeystoneStatementPart::Kind::Expression;
+					part.expression = expression;
+				}
+				else
+				{
+					part.kind = KeystoneStatementPart::Kind::Text;
+					part.text = rawText;
+				}
+
+				result.text += rawText;
+				result.parts.push_back(std::move(part));
+				first = false;
+				continue;
+			}
+
+			const Token consumed = parser.nextToken();
+			KeystoneStatementPart part;
+
+			if (consumed.type == TokenType::Identifier)
+			{
+				const std::string& identifier = consumed.identifierValue().string();
 				result.text += identifier;
 				if (first)
 					result.mnemonic = identifier;
 				if (!identifier.empty() && identifier[0] == '@')
 					result.hasUnsupportedLabel = true;
+
+				part.kind = first ? KeystoneStatementPart::Kind::Text
+					: KeystoneStatementPart::Kind::Identifier;
+				part.text = identifier;
 			}
-			else if (token.type == TokenType::Integer)
+			else if (consumed.type == TokenType::Integer)
 			{
 				// Configuring Keystone's symbol resolver changes its lexer to
 				// radix 16. Preserve armips' already parsed numeric value by
 				// passing an explicitly based literal instead of the source text.
-				result.text += formatKeystoneInteger(token.intValue());
+				result.text += formatKeystoneInteger(consumed.intValue());
+				part.kind = KeystoneStatementPart::Kind::Integer;
+				part.value = consumed.intValue();
 			}
 			else
 			{
-				result.text += token.getOriginalText();
+				result.text += consumed.getOriginalText();
+				part.kind = KeystoneStatementPart::Kind::Text;
+				part.text = consumed.getOriginalText();
 			}
 
-			if (token.type == TokenType::Assign)
+			if (consumed.type == TokenType::Assign)
 				result.hasLiteralPoolSyntax = true;
+
+			result.parts.push_back(std::move(part));
 			first = false;
 		}
 
@@ -142,6 +204,9 @@ namespace
 
 			statement.text.replace(0, statement.mnemonic.size(), replacement.second);
 			statement.mnemonic = replacement.second;
+			if (!statement.parts.empty() &&
+				statement.parts.front().kind == KeystoneStatementPart::Kind::Text)
+				statement.parts.front().text = replacement.second;
 			return;
 		}
 	}
@@ -151,9 +216,10 @@ namespace
 
 thread_local CKeystoneArmInstruction* CKeystoneArmInstruction::activeCommand = nullptr;
 
-CKeystoneArmInstruction::CKeystoneArmInstruction(std::string source, bool thumb,
-	Endianness endianness, std::shared_ptr<KeystoneItBlock> itBlock, size_t itIndex)
-	: source(std::move(source)), thumb(thumb), endianness(endianness),
+CKeystoneArmInstruction::CKeystoneArmInstruction(std::vector<KeystoneStatementPart> parts,
+	std::string source, bool thumb, Endianness endianness,
+	std::shared_ptr<KeystoneItBlock> itBlock, size_t itIndex)
+	: parts(std::move(parts)), source(std::move(source)), thumb(thumb), endianness(endianness),
 	  itBlock(std::move(itBlock)), itIndex(itIndex)
 {
 }
@@ -189,10 +255,121 @@ bool CKeystoneArmInstruction::resolveSymbolForCommand(const char* symbol, uint64
 	return true;
 }
 
-std::string CKeystoneArmInstruction::assemblySource() const
+std::string CKeystoneArmInstruction::resolveIdentifier(const std::string& name)
+{
+	Identifier identifier(name);
+
+	// symbolExists does not create a symbol, unlike getLabel. Every identifier
+	// token passes through here, including register names, so a lookup that
+	// implicitly registers unknown names would misresolve all operands.
+	if (!Global.symbolTable.symbolExists(identifier, FileNum, getSection()))
+		return name;
+
+	std::shared_ptr<Label> label = Global.symbolTable.getLabel(identifier, FileNum, getSection());
+	if (label == nullptr)
+		return name;
+
+	if (!label->isDefined())
+	{
+		if (std::find(undefinedSymbols.begin(), undefinedSymbols.end(), name) == undefinedSymbols.end())
+			undefinedSymbols.emplace_back(name);
+
+		// A nearby provisional value lets branch encodings establish their size
+		// on the first pass. A later pass replaces it with the defined address.
+		return formatKeystoneInteger(address);
+	}
+
+	return formatKeystoneInteger(label->getValue());
+}
+
+std::string CKeystoneArmInstruction::buildSource()
+{
+	// MOVW encodes a 16-bit immediate, and Keystone deliberately rejects larger
+	// symbolic values unless they are wrapped in :lower16:. Patch code loads a
+	// full address with a MOVW/MOVT pair, where MOVW is expected to take the
+	// lower half. Treat symbol and expression operands of MOVW as their lower
+	// 16 bits while keeping strict range checks for plain literals.
+	const bool isMovw = !parts.empty() &&
+		parts.front().kind == KeystoneStatementPart::Kind::Text &&
+		parts.front().text == "movw";
+
+	std::string result;
+	std::string immediate;
+	bool pastComma = false;
+	bool immediateHasSymbol = false;
+
+	for (KeystoneStatementPart& part : parts)
+	{
+		std::string text;
+		switch (part.kind)
+		{
+		case KeystoneStatementPart::Kind::Text:
+			text = part.text;
+			break;
+		case KeystoneStatementPart::Kind::Identifier:
+			text = resolveIdentifier(part.text);
+			break;
+		case KeystoneStatementPart::Kind::Integer:
+			text = formatKeystoneInteger(part.value);
+			break;
+		case KeystoneStatementPart::Kind::Expression:
+			{
+				int64_t value = 0;
+				if (!part.expression.evaluateInteger(value))
+				{
+					Logger::queueError(Logger::Error,
+						"Could not evaluate expression in \"%s\"", source);
+					value = 0;
+				}
+				text = formatKeystoneInteger(value);
+			}
+			break;
+		}
+
+		if (isMovw && pastComma)
+		{
+			if (part.kind == KeystoneStatementPart::Kind::Identifier ||
+				part.kind == KeystoneStatementPart::Kind::Expression)
+				immediateHasSymbol = true;
+
+			if (!immediate.empty())
+				immediate += ' ';
+			immediate += text;
+		}
+		else
+		{
+			if (!result.empty())
+				result += ' ';
+			result += text;
+		}
+
+		if (part.kind == KeystoneStatementPart::Kind::Text && part.text == ",")
+			pastComma = true;
+	}
+
+	if (isMovw && pastComma && immediateHasSymbol)
+	{
+		if (!immediate.empty() && immediate[0] == '#')
+		{
+			std::string expression = immediate.substr(1);
+			if (!expression.empty() && expression[0] == ' ')
+				expression.erase(0, 1);
+			return result + " # ( " + expression + " ) & 0xffff";
+		}
+
+		return result + " ( " + immediate + " ) & 0xffff";
+	}
+
+	if (immediate.empty())
+		return result;
+
+	return result + ' ' + immediate;
+}
+
+std::string CKeystoneArmInstruction::assemblySource()
 {
 	if (itBlock == nullptr)
-		return source;
+		return buildSource();
 
 	std::ostringstream stream;
 	for (size_t index = 0; index <= itIndex && index < itBlock->statements.size(); ++index)
@@ -258,7 +435,7 @@ bool CKeystoneArmInstruction::Validate(const ValidateState& state)
 	unsigned char* assembled = nullptr;
 	size_t assembledSize = 0;
 	size_t statementCount = 0;
-	const std::string input = assemblySource();
+	std::string input = assemblySource();
 	activeCommand = this;
 	const int result = ks_asm(engine, input.c_str(), assemblyAddress,
 		&assembled, &assembledSize, &statementCount);
@@ -294,7 +471,7 @@ bool CKeystoneArmInstruction::Validate(const ValidateState& state)
 	{
 		const ks_err error = ks_errno(engine);
 		Logger::queueError(Logger::Error, "Keystone ARM assembly failed for \"%s\": %s",
-			source, ks_strerror(error));
+			input, ks_strerror(error));
 		if (itBlock != nullptr)
 			itBlock->prefixValid = false;
 		if (assembled != nullptr)
@@ -321,7 +498,7 @@ bool CKeystoneArmInstruction::Validate(const ValidateState& state)
 	{
 		Logger::queueError(Logger::Error,
 			"Keystone produced no code for \"%s\"; Thumb conditional instructions require an IT block",
-			source);
+			input);
 	}
 
 	for (const std::string& symbol : undefinedSymbols)
@@ -383,7 +560,7 @@ std::unique_ptr<CAssemblerCommand> parseKeystoneArmOpcode(
 		activeItBlock->statements.push_back(statement.text);
 		const size_t index = activeItBlock->statements.size() - 1;
 		auto command = std::make_unique<CKeystoneArmInstruction>(
-			statement.text, thumb, endianness, activeItBlock, index);
+			std::move(statement.parts), statement.text, thumb, endianness, activeItBlock, index);
 		if (activeItBlock->statements.size() == activeItBlock->expectedStatementCount)
 			activeItBlock.reset();
 		return command;
@@ -395,10 +572,11 @@ std::unique_ptr<CAssemblerCommand> parseKeystoneArmOpcode(
 		activeItBlock->expectedStatementCount = statement.mnemonic.size();
 		activeItBlock->statements.push_back(statement.text);
 		return std::make_unique<CKeystoneArmInstruction>(
-			statement.text, thumb, endianness, activeItBlock, 0);
+			std::move(statement.parts), statement.text, thumb, endianness, activeItBlock, 0);
 	}
 
-	return std::make_unique<CKeystoneArmInstruction>(statement.text, thumb, endianness);
+	return std::make_unique<CKeystoneArmInstruction>(
+		std::move(statement.parts), statement.text, thumb, endianness);
 }
 
 void resetKeystoneArmParserState()

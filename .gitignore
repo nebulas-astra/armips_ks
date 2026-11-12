@@ -13,3 +13,5 @@
 /.vs/
 /out/
 /build/
+
+*.asm

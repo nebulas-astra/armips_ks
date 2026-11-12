@@ -44,6 +44,12 @@ initialized. An alternate Keystone source tree can be selected with
 Exception; review those terms when distributing a build that includes this
 backend.
 
+Instruction operands may use armips expressions, expression functions such as
+`org(...)`, and label names. They are evaluated on every validation pass and
+passed to Keystone as numeric literals. Because `MOVW` only encodes a 16-bit
+immediate, a symbolic `MOVW` operand contributes its lower 16 bits (as with
+`:lower16:`); plain numeric literals still have to fit.
+
 ### 3. Write text with UTF-8 encoding
 
 ```

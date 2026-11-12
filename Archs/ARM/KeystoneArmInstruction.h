@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Archs/ARM/Arm.h"
+#include "Core/Expression.h"
 
 #include <memory>
 #include <string>
@@ -15,10 +16,24 @@ struct KeystoneItBlock
 	bool prefixValid = false;
 };
 
+// A single token of an ARM statement. Identifiers are resolved to label values
+// and expression functions are evaluated while the statement is validated, so
+// macro arguments that are expressions reach Keystone as numeric literals.
+struct KeystoneStatementPart
+{
+	enum class Kind { Text, Identifier, Integer, Expression };
+
+	Kind kind = Kind::Text;
+	std::string text;
+	int64_t value = 0;
+	Expression expression;
+};
+
 class CKeystoneArmInstruction: public ArmOpcodeCommand
 {
 public:
-	CKeystoneArmInstruction(std::string source, bool thumb, Endianness endianness,
+	CKeystoneArmInstruction(std::vector<KeystoneStatementPart> parts, std::string source,
+		bool thumb, Endianness endianness,
 		std::shared_ptr<KeystoneItBlock> itBlock = nullptr, size_t itIndex = 0);
 
 	bool Validate(const ValidateState& state) override;
@@ -29,8 +44,11 @@ public:
 private:
 	static bool resolveSymbol(const char* symbol, uint64_t* value);
 	bool resolveSymbolForCommand(const char* symbol, uint64_t* value);
-	std::string assemblySource() const;
+	std::string resolveIdentifier(const std::string& name);
+	std::string buildSource();
+	std::string assemblySource();
 
+	std::vector<KeystoneStatementPart> parts;
 	std::string source;
 	bool thumb;
 	Endianness endianness;
