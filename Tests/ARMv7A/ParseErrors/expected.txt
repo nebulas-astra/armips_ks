@@ -1,0 +1,3 @@
+ParseErrors.asm(5) error: Invalid expression in ARMv7-A operand
+ParseErrors.asm(6) error: Literal-pool syntax (ldr ..., =value) is not supported by the ARMv7-A backend
+ParseErrors.asm(7) error: Literal-pool syntax (ldr ..., =value) is not supported by the ARMv7-A backend

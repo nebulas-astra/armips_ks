@@ -61,6 +61,7 @@ public:
 	void setVersion(ArmArchType type) { version = type; }
 	ArmArchType getVersion() { return version; }
 	bool isArmV7A() const { return version == AARCH_ARMV7A || version == AARCH_ARMV7A_BIG; }
+	void flushIncompleteKeystoneItBlock();
 
 	std::vector<ArmPoolEntry> getPoolContent() { return currentPoolContent; }
 	void clearPoolContent() { currentPoolContent.clear(); }

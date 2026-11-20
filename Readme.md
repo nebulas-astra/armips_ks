@@ -30,25 +30,32 @@ Prints the message and sets warning/error flags. Useful with conditionals.
 
 When armips is built with `ARMIPS_ARMV7A=ON`, the `.armv7a` directive selects
 the Keystone-based little-endian ARMv7-A backend. `.armv7a.big` selects its
-big-endian variant. Use `.arm` and `.thumb` to switch between A32 and Thumb-2
-instruction state. The existing `.gba`, `.nds`, `.3ds`, `.arm.little`, and
-`.arm.big` modes continue to use the original armips encoder.
+big-endian variant (emitting big-endian BE-32 instruction encodings, matching
+Keystone's `KS_MODE_BIG_ENDIAN`). Use `.arm` and `.thumb` to switch between
+A32 and Thumb-2 instruction state. The existing `.gba`, `.nds`, `.3ds`,
+`.arm.little`, and `.arm.big` modes continue to use the original armips
+encoder.
 
-The initial backend supports global labels and forward references. It does not
-support `@StaticLabel`, `@@LocalLabel`, `.pool`, or the `ldr ..., =value`
-literal-pool pseudo instruction. Keystone is included as the `ext/keystone`
-submodule and the backend is enabled automatically when that submodule is
-initialized. An alternate Keystone source tree can be selected with
-`ARMIPS_KEYSTONE_SOURCE_DIR`, or the backend can be disabled with
+The backend supports global labels, `@StaticLabel`, `@@LocalLabel`, forward
+references, `.msg`, `add/sub Rd, =expr` PC-relative addressing, and explicit
+`:lower16:` / `:upper16:` operand modifiers. It does not support `.pool` or the
+`ldr ..., =value` literal-pool pseudo instruction. Keystone is included as the
+`ext/keystone` submodule and the backend is enabled automatically when that
+submodule is initialized. An alternate Keystone source tree can be selected
+with `ARMIPS_KEYSTONE_SOURCE_DIR`, or the backend can be disabled with
 `ARMIPS_ARMV7A=OFF`. Keystone is distributed under GPLv2 with its FOSS License
 Exception; review those terms when distributing a build that includes this
 backend.
 
-Instruction operands may use armips expressions, expression functions such as
-`org(...)`, and label names. They are evaluated on every validation pass and
-passed to Keystone as numeric literals. Because `MOVW` only encodes a 16-bit
-immediate, a symbolic `MOVW` operand contributes its lower 16 bits (as with
-`:lower16:`); plain numeric literals still have to fit.
+Instruction operands are parsed and evaluated with armips's full expression
+engine (including comparisons, ternary operators, `.`, expression functions
+such as `org(...)`, and scoped labels) on every validation pass before being
+passed to Keystone. Because `MOVW` only encodes a 16-bit immediate, a symbolic
+`MOVW` operand contributes its lower 16 bits (as with `:lower16:`); plain
+numeric literals still have to fit. Outside Thumb `IT` blocks, unsuffixed Thumb
+ALU instructions select compact 16-bit encodings when available (matching
+traditional armips behavior); use an explicit `.w` suffix to force a 32-bit
+Thumb-2 encoding.
 
 ### 3. Write text with UTF-8 encoding
 

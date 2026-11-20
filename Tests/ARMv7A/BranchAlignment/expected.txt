@@ -1,0 +1,4 @@
+BranchAlignment.asm(5) error: Branch target must be word aligned
+BranchAlignment.asm(6) error: Branch target must be halfword aligned
+BranchAlignment.asm(9) error: Branch target must be halfword aligned
+BranchAlignment.asm(10) error: Branch target must be word aligned

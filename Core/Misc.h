@@ -51,6 +51,7 @@ public:
 
 	static void printQueue();
 	static void clearQueue() { queue.clear(); };
+	static size_t getQueueSize() { return queue.size(); };
 	static std::vector<std::string> getErrors() { return errors; };
 	static bool hasError() { return error; };
 	static bool hasFatalError() { return fatalError; };

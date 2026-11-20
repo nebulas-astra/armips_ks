@@ -1,7 +1,6 @@
 #include "Parser/DirectivesParser.h"
 
 #include "Archs/ARM/Arm.h"
-#include "Archs/ARM/KeystoneArmInstruction.h"
 #include "Archs/MIPS/Mips.h"
 #include "Archs/SuperH/SuperH.h"
 #include "Commands/CAssemblerLabel.h"
@@ -438,9 +437,6 @@ std::unique_ptr<CAssemblerCommand> parseDirectiveMipsArch(Parser& parser, int fl
 
 std::unique_ptr<CAssemblerCommand> parseDirectiveArmArch(Parser& parser, int flags)
 {
-#ifdef ARMIPS_HAS_KEYSTONE
-	resetKeystoneArmParserState();
-#endif
 	Architecture::setCurrent(Arm);
 
 	switch (flags)

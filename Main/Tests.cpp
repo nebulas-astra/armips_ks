@@ -93,8 +93,12 @@ std::vector<fs::path> TestRunner::getTestsList(const fs::path& dir)
 
 		const auto &path = entry.path();
 		fs::path fileName = path / fs::u8path(path.filename().u8string() + ".asm");
+		const bool hasExpectation =
+			fs::exists(path / "expected.bin") ||
+			fs::exists(path / "expected.hex") ||
+			fs::exists(path / "expected.txt");
 
-		if (fs::exists(fileName))
+		if (fs::exists(fileName) || hasExpectation)
 		{
 			tests.push_back(path);
 		}
