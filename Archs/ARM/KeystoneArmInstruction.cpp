@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <keystone/keystone.h>
 #include <sstream>
 #include <string_view>
@@ -424,14 +425,13 @@ namespace
 
 	std::string formatKeystoneFloat(double value)
 	{
-		std::string text = tfm::format("%.17g", value);
-		if (text.find('.') == std::string::npos &&
-			text.find('e') == std::string::npos &&
-			text.find('E') == std::string::npos)
-		{
-			text += ".0";
-		}
-		return text;
+		// Configuring Keystone's symbol resolver switches its lexer to radix 16,
+		// which makes decimal floating point literals such as "1.0" invalid.
+		// C99 hexadecimal literals (e.g. "0x1.8p+1") are accepted both with and
+		// without the resolver and keep the exact value.
+		char buffer[64];
+		std::snprintf(buffer, sizeof(buffer), "%a", value);
+		return buffer;
 	}
 
 	int64_t normalizeImmediateTo32Bit(int64_t value)

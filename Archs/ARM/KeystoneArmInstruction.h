@@ -49,8 +49,11 @@ public:
 	void writeTempData(TempData& tempData) const override;
 	void setPoolAddress(int64_t address) override { }
 
-private:
+	// Keystone symbol resolver callback. The engine setup helper lives in the
+	// implementation file, so the callback has to be reachable from there.
 	static bool resolveSymbol(const char* symbol, uint64_t* value);
+
+private:
 	bool resolveSymbolForCommand(const char* symbol, uint64_t* value);
 	bool buildSource(std::string& rendered, bool& hasEvalError, bool& hasBranchTarget,
 		int64_t& branchTarget, bool forceWide);
