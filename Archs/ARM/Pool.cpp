@@ -16,6 +16,9 @@ ArmStateCommand::ArmStateCommand(bool state)
 
 bool ArmStateCommand::Validate(const ValidateState &state)
 {
+	if (Arm.isArmV7A())
+		Arm.flushIncompleteKeystoneItBlock();
+
 	RamPos = g_fileManager->getVirtualAddress();
 	return false;
 }

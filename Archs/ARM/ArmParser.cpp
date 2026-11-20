@@ -3,7 +3,6 @@
 #include "Archs/ARM/Arm.h"
 #include "Archs/ARM/CArmInstruction.h"
 #include "Archs/ARM/CThumbInstruction.h"
-#include "Archs/ARM/KeystoneArmInstruction.h"
 #include "Commands/CDirectiveFile.h"
 #include "Commands/CommandSequence.h"
 #include "Core/Common.h"
@@ -38,20 +37,12 @@ const ArmRegisterDescriptor armCopNumbers[] = {
 
 std::unique_ptr<CAssemblerCommand> parseDirectiveThumb(Parser& parser, int flags)
 {
-#ifdef ARMIPS_HAS_KEYSTONE
-	if (Arm.isArmV7A())
-		resetKeystoneArmParserState();
-#endif
 	Arm.SetThumbMode(true);
 	return std::make_unique<ArmStateCommand>(false);
 }
 
 std::unique_ptr<CAssemblerCommand> parseDirectiveArm(Parser& parser, int flags)
 {
-#ifdef ARMIPS_HAS_KEYSTONE
-	if (Arm.isArmV7A())
-		resetKeystoneArmParserState();
-#endif
 	Arm.SetThumbMode(false);
 	return std::make_unique<ArmStateCommand>(true);
 }
@@ -60,9 +51,9 @@ std::unique_ptr<CAssemblerCommand> parseDirectivePool(Parser& parser, int flags)
 {
 	if (Arm.isArmV7A())
 	{
-#ifdef ARMIPS_HAS_KEYSTONE
-		resetKeystoneArmParserState();
-#endif
+		if (!parser.isInsideTrueBlock())
+			return std::make_unique<DummyCommand>();
+
 		parser.printError(parser.peekToken(), ".pool is not supported by the ARMv7-A backend");
 		return nullptr;
 	}

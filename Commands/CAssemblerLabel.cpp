@@ -12,14 +12,6 @@ CAssemblerLabel::CAssemblerLabel(const Identifier& name, const Identifier& origi
 	this->defined = false;
 	this->label = nullptr;
 
-	if (&Architecture::current() == &Arm && Arm.isArmV7A() &&
-		(Global.symbolTable.isStaticSymbol(name) || Global.symbolTable.isLocalSymbol(name)))
-	{
-		Logger::printError(Logger::Error,
-			"@StaticLabel and @@LocalLabel are not supported by the ARMv7-A backend");
-		return;
-	}
-	
 	if (!Global.symbolTable.isLocalSymbol(name))	
 		updateSection(++Global.Section);
 

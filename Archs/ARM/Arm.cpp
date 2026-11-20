@@ -56,18 +56,24 @@ void CArmArchitecture::clear()
 {
 	currentPoolContent.clear();
 	thumb = false;
+	version = AARCH_INVALID;
 #ifdef ARMIPS_HAS_KEYSTONE
-	resetKeystoneArmParserState();
+	resetKeystoneItValidationState();
 #endif
 }
 
 void CArmArchitecture::Pass2()
 {
 	currentPoolContent.clear();
+#ifdef ARMIPS_HAS_KEYSTONE
+	resetKeystoneItValidationState();
+#endif
 }
 
 void CArmArchitecture::Revalidate()
 {
+	flushIncompleteKeystoneItBlock();
+
 	for (ArmPoolEntry& entry: currentPoolContent)
 	{
 		entry.command->applyFileInfo();
@@ -79,12 +85,19 @@ void CArmArchitecture::Revalidate()
 
 void CArmArchitecture::NextSection()
 {
+	flushIncompleteKeystoneItBlock();
+}
 
+void CArmArchitecture::flushIncompleteKeystoneItBlock()
+{
+#ifdef ARMIPS_HAS_KEYSTONE
+	::flushIncompleteKeystoneItBlock();
+#endif
 }
 
 std::unique_ptr<IElfRelocator> CArmArchitecture::getElfRelocator()
 {
-	return std::make_unique<ArmElfRelocator>(version != AARCH_GBA);
+	return std::make_unique<ArmElfRelocator>(version != AARCH_GBA, isArmV7A());
 }
 
 void CArmArchitecture::addPoolValue(ArmOpcodeCommand* command, int32_t value)
